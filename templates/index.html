@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🧠 Alzheimer's Detection AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gradient-to-br from-indigo-50 to-blue-50 min-h-screen">
+    <div class="max-w-4xl mx-auto p-8">
+        <div class="text-center mb-12">
+            <h1 class="text-6xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+                🧠 Alzheimer's AI
+            </h1>
+            <p class="text-2xl text-gray-600 mb-8">Upload MRI scan → Instant prediction</p>
+            <div class="bg-white p-4 rounded-2xl shadow-lg inline-block">
+                <span class="text-sm text-gray-500">Built by Tejas Gahallot</span>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl shadow-2xl p-12 mb-12">
+            <div id="uploadArea" class="text-center">
+                <i class="fas fa-cloud-upload-alt text-6xl text-blue-500 mb-6"></i>
+                <h2 class="text-4xl font-bold text-gray-800 mb-4">Upload MRI Scan</h2>
+                <input type="file" id="imageInput" accept="image/*" class="hidden">
+                <button onclick="uploadImage()" class="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-12 py-6 rounded-3xl text-2xl font-bold hover:shadow-xl transition-all">
+                    Choose Image
+                </button>
+            </div>
+
+            <div id="resultArea" class="hidden mt-12 text-center">
+                <img id="preview" class="w-96 h-96 object-cover rounded-2xl shadow-2xl mx-auto mb-8">
+                <div id="prediction" class="text-5xl font-black mb-6"></div>
+                <div id="confidence" class="text-3xl text-gray-600 mb-8"></div>
+                <div id="message" class="bg-gray-100 p-8 rounded-2xl text-xl"></div>
+                <button onclick="reset()" class="mt-8 bg-gray-500 text-white px-8 py-3 rounded-xl hover:bg-gray-600">Analyze Another</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function uploadImage() {
+            const input = document.getElementById('imageInput');
+            input.click();
+        }
+
+        document.getElementById('imageInput').onchange = async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Show preview
+            document.getElementById('preview').src = URL.createObjectURL(file);
+            document.getElementById('uploadArea').classList.add('hidden');
+            document.getElementById('resultArea').classList.remove('hidden');
+
+            // Fake prediction (replace with real API)
+            setTimeout(() => {
+                const predictions = ['Normal 🟢', 'MCI 🟡', 'Alzheimer\'s 🔴'];
+                const conf = (85 + Math.random() * 15).toFixed(1) + '%';
+                const pred = predictions[Math.floor(Math.random() * 3)];
+                
+                document.getElementById('prediction').textContent = pred;
+                document.getElementById('confidence').textContent = conf;
+                document.getElementById('message').textContent = 'Analysis complete!';
+            }, 2000);
+        }
+
+        function reset() {
+            document.getElementById('imageInput').value = '';
+            document.getElementById('uploadArea').classList.remove('hidden');
+            document.getElementById('resultArea').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
