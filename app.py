@@ -1,7 +1,7 @@
 """Flask web app that serves a trained MRI classifier.
 
 The model is produced by notebooks/train_model.ipynb and exported to
-model/model.tflite with its class names in model/labels.json.
+artifacts/model.tflite with its class names in artifacts/labels.json.
 If those files are missing the app refuses to predict (HTTP 503)
 rather than returning a made-up result.
 """
@@ -17,8 +17,8 @@ from flask import Flask, jsonify, render_template, request
 from PIL import Image, UnidentifiedImageError
 
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = Path(os.environ.get("MODEL_PATH", BASE_DIR / "model" / "model.tflite"))
-LABELS_PATH = Path(os.environ.get("LABELS_PATH", BASE_DIR / "model" / "labels.json"))
+MODEL_PATH = Path(os.environ.get("MODEL_PATH", BASE_DIR / "artifacts" / "model.tflite"))
+LABELS_PATH = Path(os.environ.get("LABELS_PATH", BASE_DIR / "artifacts" / "labels.json"))
 
 # Must match the training notebook: images are 128 x 128.
 IMG_WIDTH, IMG_HEIGHT = 128, 128
