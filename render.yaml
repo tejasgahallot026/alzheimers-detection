@@ -2,8 +2,9 @@ services:
   - type: web
     name: alzheimers-detection
     env: python
-    buildCommand: pip install --only-binary=all -r requirements.txt
-    startCommand: gunicorn app:app
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 1 --timeout 60
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
