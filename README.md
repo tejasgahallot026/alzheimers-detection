@@ -1,327 +1,95 @@
-# 🧠 Alzheimer's Disease Early Detection System
+# Alzheimer's MRI Classifier
 
-<div align="center">
+A convolutional neural network that classifies axial brain MRI slices into four dementia stages, served through a Flask web app.
 
-![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-2.x-000000?style=for-the-badge&logo=flask&logoColor=white)
-![Scikit-learn](https://img.shields.io/badge/Scikit--learn-1.x-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
-![Pandas](https://img.shields.io/badge/Pandas-2.x-150458?style=for-the-badge&logo=pandas&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+**Live demo:** https://alzheimers-detection-9lcj.onrender.com
+(free hosting, so the first load after a quiet period can take about 30 seconds)
 
-**A production-grade ML pipeline for early-stage Alzheimer's classification, deployed as a REST API.**
+> **Research and portfolio project only.** This is not a medical device. It has not been clinically validated and must not be used for diagnosis.
 
-[Features](#-features) · [Pipeline](#-pipeline) · [API Reference](#-api-reference) · [Results](#-results) · [Setup](#-setup) · [Project Structure](#-project-structure)
+## How it works
 
-</div>
+1. **Training** ([`notebooks/train_model.ipynb`](notebooks/train_model.ipynb), run on a Colab T4 GPU). Uses transfer learning from MobileNetV2 pretrained on ImageNet. Stage 1 trains a new classification head. Stage 2 unfreezes the whole backbone, including BatchNorm statistics, since MRI slices differ a lot from ImageNet photos. Training uses square-root-softened class weights for the imbalanced classes, light augmentation (rotation, zoom, translation) and early stopping on validation loss.
+2. **Export.** The trained model is converted to TensorFlow Lite with float16 weights (4.5 MB), so it runs on a small CPU server. On a 64-image check, the TFLite model agreed with the Keras model on 63.
+3. **Serving** ([`app.py`](app.py)). A Flask API resizes the uploaded image to 128×128 and runs the TFLite model. It returns the predicted class, the probability for every class, and the inference time. If the model file is missing, the API returns an error and never guesses.
 
----
+## Results
 
-## Overview
+Evaluated once on the dataset's held-out test split, which is never used for training or model selection. Full numbers are in [`artifacts/metrics.json`](artifacts/metrics.json).
 
-This project implements a supervised machine learning classification system for early detection of Alzheimer's Disease using clinical, cognitive, and neuroimaging features. The full automated pipeline covers data ingestion, preprocessing, exploratory data analysis (EDA), feature engineering, model training with cross-validation and hyperparameter tuning, and deployment as a production Flask REST API.
+**Test accuracy: 69.3%** · **Macro F1: 0.680** · Majority-class baseline: 49.5% (1,280 test images)
 
-The goal is to provide clinicians and researchers with a transparent, explainable, and accurate risk-scoring tool that flags patients in the early stages — when intervention is most effective.
-
----
-
-## ✨ Features
-
-- **End-to-end ML pipeline** — from raw CSV ingestion to live API predictions
-- **Multiple classifiers** benchmarked — Random Forest, XGBoost, SVM, Logistic Regression
-- **Stratified 5-fold cross-validation** with `GridSearchCV` hyperparameter tuning
-- **SHAP-based explainability** — per-prediction feature importance scores
-- **Production Flask REST API** with input validation, error handling, and logging
-- **Automated EDA reports** — correlation heatmaps, class balance analysis, distribution plots
-- **Dockerisable** — ready for containerised deployment
-
----
-
-## 📊 Results
-
-| Model | Accuracy | F1 Score | AUC-ROC | CV Std |
+| Class | Precision | Recall | F1 | Test images |
 |---|---|---|---|---|
-| **XGBoost** ✅ | **94.8%** | **0.941** | **0.976** | ±0.012 |
-| Random Forest | 91.4% | 0.903 | 0.947 | ±0.018 |
-| SVM (RBF) | 88.2% | 0.871 | 0.921 | ±0.022 |
-| Logistic Regression | 84.6% | 0.839 | 0.901 | ±0.026 |
+| MildDemented | 0.747 | 0.430 | 0.546 | 172 |
+| ModerateDemented | 0.667 | 0.933 | 0.778 | 15 |
+| NonDemented | 0.725 | 0.798 | 0.760 | 634 |
+| VeryMildDemented | 0.634 | 0.638 | 0.636 | 459 |
 
-> Best model: **XGBoost** with tuned `n_estimators=300`, `max_depth=6`, `learning_rate=0.05`
+The model clearly beats the baseline, but it is far from clinical quality. It confuses neighbouring stages most, especially MildDemented with VeryMildDemented. Training accuracy reached about 95% while validation plateaued near 70%, so the main limit is generalisation. More data or stronger regularisation would be the next steps.
 
----
+**Earlier experiments, kept for transparency.** With the backbone frozen apart from its top layers, test accuracy was 51.8%, barely above the baseline. With full fine-tuning but BatchNorm frozen at its ImageNet statistics, it was 63.9%. Letting BatchNorm adapt gave the result above.
 
-## 🔁 Pipeline
+![Confusion matrix](artifacts/confusion_matrix.png)
+![Training curves](artifacts/training_curves.png)
 
-```
-Raw Data (CSV/JSON)
-      │
-      ▼
-┌─────────────────┐
-│  Data Ingestion │  ← Schema validation, null checks, logging
-└────────┬────────┘
-         │
-         ▼
-┌──────────────────────┐
-│  Preprocessing       │  ← Imputation, outlier removal, encoding, scaling
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────┐
-│  EDA             │  ← Correlation matrix, class balance, distributions
-└──────┬───────────┘
-       │
-       ▼
-┌──────────────────────┐
-│  Feature Engineering │  ← Composite scores, interactions, RFECV selection
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────────────────┐
-│  Model Training & CV Tuning      │  ← 5-fold stratified CV, GridSearchCV
-└──────────────┬───────────────────┘
-               │
-               ▼
-┌──────────────────────────┐
-│  Evaluation & SHAP       │  ← Accuracy, F1, AUC, confusion matrix
-└──────────┬───────────────┘
-           │
-           ▼
-┌──────────────────────┐
-│  Flask REST API      │  ← /predict, /explain, /batch, /health
-└──────────────────────┘
-```
+### Limitations
 
----
+- **Possible data leakage.** The dataset has no patient IDs, and slices from the same person can appear in both the training and test sets. This tends to inflate test scores, so the figures above are an upper bound. A proper evaluation would split the data by patient, for example using OASIS with its subject IDs.
+- **Single source.** All images come from one public dataset. Performance on scans from other hospitals, scanners or protocols is unknown.
+- **Severe class imbalance.** ModerateDemented has very few examples, so its per-class scores are the least reliable.
 
-## 🗂 Project Structure
+## Dataset
 
-```
-alzheimer-detection/
-│
-├── app/
-│   ├── __init__.py
-│   ├── routes.py            # Flask API endpoints
-│   ├── predict.py           # Inference logic
-│   └── schemas.py           # Request/response validation (Marshmallow)
-│
-├── pipeline/
-│   ├── ingest.py            # Data loading & schema checks
-│   ├── preprocess.py        # Cleaning, imputation, encoding, scaling
-│   ├── eda.py               # Automated EDA report generation
-│   ├── features.py          # Feature engineering & RFECV selection
-│   ├── train.py             # Cross-validation, GridSearchCV, training
-│   └── evaluate.py          # Metrics, confusion matrix, SHAP values
-│
-├── models/
-│   └── xgboost_v1.pkl       # Serialised best model
-│
-├── notebooks/
-│   ├── 01_eda.ipynb         # Exploratory analysis
-│   ├── 02_feature_eng.ipynb # Feature engineering experiments
-│   └── 03_modelling.ipynb   # Model comparison & tuning
-│
-├── data/
-│   ├── raw/                 # Original dataset (not committed)
-│   └── processed/           # Cleaned, engineered features
-│
-├── tests/
-│   ├── test_pipeline.py
-│   └── test_api.py
-│
-├── Dockerfile
-├── requirements.txt
-├── config.py
-├── run.py                   # Entry point
-└── README.md
-```
+[Falah/Alzheimer_MRI](https://huggingface.co/datasets/Falah/Alzheimer_MRI) on Hugging Face: 6,400 axial MRI slices at 128×128, labelled MildDemented, ModerateDemented, NonDemented and VeryMildDemented, with a fixed train/test split (5,120 / 1,280). A stratified 20% of the training split is used for validation. The notebook downloads the data, which needs no login; it is not stored in this repo.
 
----
+## API
 
-## 🔌 API Reference
-
-### `POST /api/v1/predict`
-
-Run classification on a single patient's clinical features.
-
-**Request body:**
+`POST /predict` takes a multipart form with an `image` field (PNG or JPEG, up to 5 MB).
 
 ```json
 {
-  "age": 71,
-  "mmse_score": 22,
-  "cdr": 1.0,
-  "apoe_e4": 1,
-  "hippocampal_volume": 2.8,
-  "cortical_thickness": 3.2,
-  "education_years": 14,
-  "gender": "M"
+  "prediction": "NonDemented",
+  "confidence": 0.8132,
+  "probabilities": {"MildDemented": 0.061, "ModerateDemented": 0.004, "NonDemented": 0.8132, "VeryMildDemented": 0.1218},
+  "inference_ms": 142.7,
+  "disclaimer": "Research demo only. Not a medical device and not for clinical decisions."
 }
 ```
 
-**Response:**
+`GET /health` returns `200` when the model is loaded and `503` when it is not. Render uses it as a health check.
 
-```json
-{
-  "prediction": "MCI",
-  "risk_score": 0.724,
-  "confidence": 0.891,
-  "label": "Mild Cognitive Impairment",
-  "model_version": "xgboost_v1"
-}
-```
-
----
-
-### `GET /api/v1/explain`
-
-Returns SHAP feature importance scores for the most recent prediction.
-
-```json
-{
-  "feature_importances": {
-    "mmse_score": 0.32,
-    "cdr": 0.28,
-    "hippocampal_volume": 0.21,
-    "apoe_e4": 0.12,
-    "age": 0.07
-  }
-}
-```
-
----
-
-### `POST /api/v1/batch`
-
-Submit multiple patient records for batch inference.
-
-```json
-{
-  "patients": [ { "age": 68, "mmse_score": 26, "..." : "..." }, { "..." : "..." } ]
-}
-```
-
----
-
-### `GET /api/v1/health`
-
-```json
-{
-  "status": "ok",
-  "model": "xgboost_v1",
-  "uptime_seconds": 3821
-}
-```
-
----
-
-## ⚙️ Setup
-
-### 1. Clone the repository
+## Run locally
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/alzheimer-detection.git
-cd alzheimer-detection
+git clone https://github.com/tejasgahallot026/alzheimers-detection.git
+cd alzheimers-detection
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+python app.py                                       # http://localhost:5000
+pytest -v                                           # API tests, no model needed
 ```
 
-### 2. Create a virtual environment
+The app expects `artifacts/model.tflite` and `artifacts/labels.json`. Both are produced by the training notebook.
 
-```bash
-python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Run the full pipeline
-
-```bash
-python pipeline/ingest.py      # Load & validate data
-python pipeline/preprocess.py  # Clean & transform
-python pipeline/eda.py         # Generate EDA report
-python pipeline/features.py    # Feature engineering
-python pipeline/train.py       # Train & tune model
-python pipeline/evaluate.py    # Evaluate & save model
-```
-
-### 5. Start the Flask API
-
-```bash
-python run.py
-# API running at http://localhost:5000
-```
-
-### 6. Test a prediction
-
-```bash
-curl -X POST http://localhost:5000/api/v1/predict \
-  -H "Content-Type: application/json" \
-  -d '{"age": 71, "mmse_score": 22, "cdr": 1.0, "apoe_e4": 1}'
-```
-
----
-
-### Docker
-
-```bash
-docker build -t alzheimer-api .
-docker run -p 5000:5000 alzheimer-api
-```
-
----
-
-## 🧪 Running Tests
-
-```bash
-pytest tests/ -v
-```
-
----
-
-## 🔑 Key Technical Decisions
-
-**Why XGBoost?** Gradient boosted trees outperform linear models on tabular clinical data with mixed feature types. They handle missing values natively and are interpretable via SHAP values — critical in a medical context.
-
-**Why stratified CV?** Class imbalance in Alzheimer's datasets (more healthy controls than MCI/AD cases) means random splits can inflate accuracy. Stratified folds preserve class proportions across every fold.
-
-**Why RFECV for feature selection?** Recursive feature elimination with cross-validation finds the optimal feature subset without data leakage — unlike selecting features on the full dataset first.
-
-**Why SHAP for explainability?** In clinical applications, a prediction without an explanation has limited utility. SHAP provides consistent, locally accurate feature attributions that a clinician can reason about.
-
----
-
-## 📦 Dependencies
+## Project structure
 
 ```
-flask==2.3.3
-scikit-learn==1.3.0
-xgboost==1.7.6
-pandas==2.0.3
-numpy==1.24.4
-shap==0.42.1
-marshmallow==3.20.1
-matplotlib==3.7.2
-seaborn==0.12.2
-joblib==1.3.2
-pytest==7.4.0
+app.py                     Flask app: preprocessing, TFLite inference, API routes
+templates/index.html       Upload page
+notebooks/train_model.ipynb  Training, evaluation and export (Colab)
+artifacts/                 model.tflite, labels.json, metrics.json, confusion_matrix.png, training_curves.png
+tests/test_app.py          API tests using a stand-in model
+requirements.txt           Runtime dependencies (uses ai-edge-litert, not full TensorFlow)
+Procfile, render.yaml      Deployment on Render
 ```
 
----
+## Tech stack
 
-## ⚠️ Disclaimer
+Python, TensorFlow/Keras (training), TensorFlow Lite via ai-edge-litert (serving), Flask, Gunicorn, NumPy, Pillow, scikit-learn, pytest, Render.
 
-This project is a research and portfolio demonstration. It is **not** validated for clinical use and should not be used to make medical decisions. Always consult qualified medical professionals.
+## Possible next steps
 
----
-
-## 📄 License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-<div align="center">
-Made with Python · Flask · Scikit-learn · Pandas
-</div>
+- Retrain and evaluate on a dataset with patient IDs, to get a leakage-free estimate.
+- Add Grad-CAM heatmaps so users can see which regions drove a prediction.
+- Add CI that runs the tests on every push.
